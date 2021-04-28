@@ -130,3 +130,5 @@ dmypy.json
 
 # unique stuff
 config.py
+input/*
+output/*
