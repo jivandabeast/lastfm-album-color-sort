@@ -19,6 +19,7 @@ import scipy.cluster
 import matplotlib.pyplot as plt
 import matplotlib.colors as mc
 import webcolors
+import os
 
 NUM_CLUSTERS = 5
 
@@ -56,6 +57,8 @@ COLOR_NAMES = {
     (300, 300, 300):  "white",
 }
 
+colorFolders = ["red", "orange", "yellow", "spring green", "green", "turquoise", "cyan", "ocean", "blue", "violet", "magenta", "raspberry", "black", "white"]
+
 def get_closest_color(rgb):
     r, g, b = rgb
     color_diffs = []
@@ -84,3 +87,16 @@ def getDominantColor(img, filename):
         return(filename + ' is '+colorName)
     except:
         print(filename + ' was broken')
+
+def verify_dirs():
+    # Verify and correct file structure
+    if not os.path.exists('input'):
+        os.makedirs('input')
+
+    if not os.path.exists('output'):
+        os.makedirs('output')
+
+    for color in colorFolders:
+        if not os.path.exists('output/' + color):
+            os.makedirs(os.makedirs('output/' + color))
+    return None

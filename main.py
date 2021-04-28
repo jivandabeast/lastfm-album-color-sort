@@ -2,10 +2,15 @@ import requests
 import json
 import re
 import shutil
-import os
 import time
+import math
 from process import getDominantColor
+from process import verify_dirs
 import config
+
+def clean_string(string):
+    string = re.sub(r'[^A-Za-z0-9 ]+', '', string)
+    return string
 
 def lastfm_get(method, data):
     headers = {}
@@ -26,6 +31,7 @@ def lastfm_get(method, data):
 
 def itunes_get(term):
     doEntity = False
+    # term = clean_string(term)
 
     headers={}
     payload={}
@@ -47,10 +53,14 @@ def fix_url(url):
     return url
 
 def reject_types(result):
-    if result['kind'] == 'music-video':
+    if result['kind'] == 'song':
+        return True
+    elif result['kind'] == 'collection':
+        return True
+    elif result['kind'] == 'music-video':
         return False
     else:
-        return True
+        return False
 
 def force_url(iInfo):
     for result in iInfo['results']:
@@ -59,102 +69,125 @@ def force_url(iInfo):
         else:
             pass
 
-coverURL = []
-colors = ["red", "orange", "yellow", "spring green", "green", "turquoise", "cyan", "ocean", "blue", "violet", "magenta", "raspberry", "black", "white"]
+def get_url(lastAlbums):
+    count = 0
+    coverURL = []
+    for album in lastAlbums['topalbums']['album']:
+        # print rank, album title, and artist & generate itunes search terms
+        print(album['@attr']['rank'], album['name'], album['artist']['name'], album['mbid'])
+        search = album['name'] + " " + album['artist']['name']
 
-lastAlbums = lastfm_get('user.gettopalbums', config.lastfmUser).json()
+        # Temporary check to only do the first few entries in the request
+        # if str(album['@attr']['rank']) == str(40) or str(album['@attr']['rank']) == str(45):
+        if int(count) < int(config.count):
+            # Get last.fm album information
+            lastInfo = lastfm_get('album.getInfo', album).json()
+            # Get iTunes song information
+            itunesInfo = itunes_get(search).json()
 
-# Verify and correct file structure
-if not os.path.exists('input'):
-    os.makedirs('input')
+            # Sometimes no results are returned, make a note of it and continue
+            # Unsure if it's best to decrement the counter or not, may be helpful in debugging
+            if itunesInfo['resultCount'] == 0:
+                print('Error, no results returned -- continuing')
+                # counter -= 1
+            else:
+                # Iterate over iTunes search results to find matching track number & titles (for additional verification)
+                # When a match is found, store the artwork URL in the coverURL list
+                pointer = 1
+                for result in itunesInfo['results']:
+                    # print('Trying result %d/%d' % (pointer, itunesInfo['resultCount']))
+                    try:
+                        if str(result['trackNumber']) == str(lastInfo['album']['tracks']['track'][0]['@attr']['rank']):
+                            if str(result['trackName']) == str(lastInfo['album']['tracks']['track'][0]['name']):
+                                print("They're the same")
+                                coverURL.append(result['artworkUrl100'])
+                                break
+                        if itunesInfo['resultCount'] == pointer:
+                            print('Error, no more entries -- forcing value')
+                            coverURL.append(force_url(itunesInfo))
+                            break
+                    except IndexError:
+                        # For some reason, some albums don't return a tracklist on last.fm
+                        # As a result, we will resort to matching artist name and album title instead (not perfect)
+                        if str(result['artistName']).lower() == str(lastInfo['album']['artist']).lower():
+                            if str(result['collectionName']).lower() == str(lastInfo['album']['name']).lower():
+                                print("They're the same")
+                                coverURL.append(result['artworkUrl100'])
+                                break
+                            if str(result['trackName']).lower() == str(lastInfo['album']['name']).lower():
+                                print("Close match found, working with it")
+                                coverURL.append(result['artworkUrl100'])
+                                break
+                        if itunesInfo['resultCount'] == pointer:
+                            print('Index Error, no more entries -- forcing value')
+                            coverURL.append(force_url(itunesInfo))
+                            break
+                    except KeyError:
+                        # Some entries will show up as singles, not tracks in an album
+                        # Skip these usually, unless there are no more results to check or it was the only one
+                        if itunesInfo['resultCount'] == pointer:
+                            print('Key Error, no more entries -- forcing value')
+                            coverUrl.append(force_url(itunesInfo))
+                            break
+                        else:
+                            pass
+                    except Exception as e:
+                        # If all else fails, spit out the error and keep it moving
+                        print('---')
+                        print('Error:', e)
+                        print('---')
+                        print(result)
+                        print('---')
+                        print(lastInfo)
+                    pointer += 1
+            print('---')
+        else:
+            break
+            # pass
 
-if not os.path.exists('output'):
-    os.makedirs('output')
+        # Temporary counter to limit the amount of API requests during testing
+        count += 1
 
-for color in colors:
-    if not os.path.exists('output/' + color):
-        os.makedirs(os.makedirs('output/' + color))
-
-count = 0
-for album in lastAlbums['topalbums']['album']:
-    # print rank, album title, and artist & generate itunes search terms
-    print(album['@attr']['rank'], album['name'], album['artist']['name'], album['mbid'])
-    search = album['name'] + " " + album['artist']['name']
-
-    # Temporary check to only do the first few entries in the request
-    #if str(album['@attr']['rank']) == str(18):
-    if count <= 20:
-        # Get last.fm album information
-        lastInfo = lastfm_get('album.getInfo', album).json()
-        # Get iTunes song information
-        itunesInfo = itunes_get(search).json()
-        
-        # Iterate over iTunes search results to find matching track number & titles (for additional verification)
-        # When a match is found, store the artwork URL in the coverURL list
-        pointer = 1
-        for result in itunesInfo['results']:
-            # print('Trying result %d/%d' % (pointer, itunesInfo['resultCount']))
-            try:
-                if str(result['trackNumber']) == str(lastInfo['album']['tracks']['track'][0]['@attr']['rank']):
-                    if str(result['trackName']) == str(lastInfo['album']['tracks']['track'][0]['name']):
-                        print("They're the same")
-                        coverURL.append(result['artworkUrl100'])
-                        break
-                if itunesInfo['resultCount'] == pointer:
-                    print('Error, no more entries -- forcing value')
-                    coverURL.append(force_url(itunesInfo))
-                    break
-            except IndexError:
-                # For some reason, some albums don't return a tracklist on last.fm
-                # As a result, we will resort to matching artist name and album title instead (not perfect)
-                if str(result['artistName']).lower() == str(lastInfo['album']['artist']).lower():
-                    if str(result['collectionName']).lower() == str(lastInfo['album']['name']).lower():
-                        print("They're the same")
-                        coverURL.append(result['artworkUrl100'])
-                        break
-                    if str(result['trackName']).lower() == str(lastInfo['album']['name']).lower():
-                        print("Close match found, working with it")
-                        coverURL.append(result['artworkUrl100'])
-                        break
-                if itunesInfo['resultCount'] == pointer:
-                    print('Index Error, no more entries -- forcing value')
-                    coverURL.append(force_url(itunesInfo))
-                    break
-            except KeyError:
-                # Some entries will show up as singles, not tracks in an album
-                # Skip these usually, unless there are no more results to check or it was the only one
-                if itunesInfo['resultCount'] == pointer:
-                    print('Key Error, no more entries -- forcing value')
-                    coverUrl.append(force_url(itunesInfo))
-                    break
-                else:
-                    pass
-            except Exception as e:
-                # If all else fails, spit out the error and keep it moving
-                print('---')
-                print('Error:', e)
-                print('---')
-                print(result)
-                print('---')
-                print(lastInfo)
-            pointer += 1
-        print('---')
+        # Help with the rate limiting, 20/minute
         time.sleep(4)
-    else:
-        break
+    return coverURL
 
-    # Temporary counter to limit the amount of API requests during testing
-    count += 1
+def download_covers(coverURL):
+    # Putting loop for downloading covers into here
+    count = 0
+    for url in coverURL:
+        url = fix_url(url)
+        response = requests.get(url, stream=True)
+        fileName = "input/" + str(count) + ".jpg"
+        with open(fileName, 'wb') as outFile:
+            shutil.copyfileobj(response.raw, outFile)
+        del response
+        count += 1
+    return None
 
-    # Help with the rate limiting, 20/minute
-    time.sleep(4)
+def sort_colors():
+    # Define the loop for iterating and sorting the images
+    return None
 
-count = 0
-for url in coverURL:
-    url = fix_url(url)
-    response = requests.get(url, stream=True)
-    fileName = "input/" + str(count) + ".jpg"
-    with open(fileName, 'wb') as outFile:
-        shutil.copyfileobj(response.raw, outFile)
-    del response
-    count += 1
+# This is the main functionality of the script
+
+# Set up global variables
+pageCount = math.ceil(float(config.count) / 50)
+urlList = []
+
+# Verify that the file structure is accurate
+verify_dirs()
+
+# Populate the urlList with the amount of urls specified in the config file
+i=0
+while i < pageCount:
+    lastAlbumList = lastfm_get('user.gettopalbums', config.lastfmUser).json()
+    urlList.extend(get_url(lastAlbumList))
+    i += 1
+print(len(urlList))
+
+# Download all the covers from the urlList
+# download_covers(urlList)
+
+# Sort the colors
+# sort_colors
