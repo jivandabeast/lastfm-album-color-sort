@@ -11,7 +11,7 @@ def clean_string(string):
     string = re.sub(r'[^A-Za-z0-9 ]+', '', string)
     return string
 
-def lastfm_get(method, data):
+def lastfm_get(method, data, page=None):
     headers = {}
     payload = {}
     url = 'https://ws.audioscrobbler.com/2.0/'
@@ -24,6 +24,8 @@ def lastfm_get(method, data):
     elif method[:5] == 'album':
         payload['artist'] = data['artist']['name']
         payload['album'] = data['name']
+    if page is not None:
+        payload['page'] = page
 
     request = requests.get(url, headers=headers, params=payload)
     return request
@@ -73,7 +75,7 @@ def get_url(lastAlbums):
     coverURL = []
     for album in lastAlbums['topalbums']['album']:
         # print rank, album title, and artist & generate itunes search terms
-        print(album['@attr']['rank'], album['name'], album['artist']['name'], album['mbid'])
+        print(album['@attr']['rank'], album['name'], album['artist']['name'])
         search = album['name'] + " " + album['artist']['name']
 
         # Temporary check to only do the first few entries in the request
@@ -88,7 +90,7 @@ def get_url(lastAlbums):
             # Unsure if it's best to decrement the counter or not, may be helpful in debugging
             if itunesInfo['resultCount'] == 0:
                 print('Error, no results returned -- continuing')
-                # counter -= 1
+                count -= 1
             else:
                 # Iterate over iTunes search results to find matching track number & titles (for additional verification)
                 # When a match is found, store the artwork URL in the coverURL list
@@ -98,7 +100,7 @@ def get_url(lastAlbums):
                     try:
                         if str(result['trackNumber']) == str(lastInfo['album']['tracks']['track'][0]['@attr']['rank']):
                             if str(result['trackName']) == str(lastInfo['album']['tracks']['track'][0]['name']):
-                                print("They're the same")
+                                print("Match found")
                                 coverURL.append(result['artworkUrl100'])
                                 break
                         if itunesInfo['resultCount'] == pointer:
@@ -110,7 +112,7 @@ def get_url(lastAlbums):
                         # As a result, we will resort to matching artist name and album title instead (not perfect)
                         if str(result['artistName']).lower() == str(lastInfo['album']['artist']).lower():
                             if str(result['collectionName']).lower() == str(lastInfo['album']['name']).lower():
-                                print("They're the same")
+                                print("Match found")
                                 coverURL.append(result['artworkUrl100'])
                                 break
                             if str(result['trackName']).lower() == str(lastInfo['album']['name']).lower():
@@ -126,7 +128,7 @@ def get_url(lastAlbums):
                         # Skip these usually, unless there are no more results to check or it was the only one
                         if itunesInfo['resultCount'] == pointer:
                             print('Key Error, no more entries -- forcing value')
-                            coverUrl.append(force_url(itunesInfo))
+                            coverURL.append(force_url(itunesInfo))
                             break
                         else:
                             pass
@@ -138,6 +140,9 @@ def get_url(lastAlbums):
                         print(result)
                         print('---')
                         print(lastInfo)
+
+                        # Decrement the counter since we won't be appending
+                        count -= 1
                     pointer += 1
             print('---')
         else:
@@ -176,10 +181,12 @@ process.verify_dirs()
 # Populate the urlList with the amount of urls specified in the config file
 i=0
 while i < pageCount:
-    lastAlbumList = lastfm_get('user.gettopalbums', config.lastfmUser).json()
+    page = i + 1
+    lastAlbumList = lastfm_get('user.gettopalbums', config.lastfmUser, page).json()
     urlList.extend(get_url(lastAlbumList))
     i += 1
-print(len(urlList))
+
+print('Generated', len(urlList), 'urls.')
 
 # Download all the covers from the urlList
 download_covers(urlList)
