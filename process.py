@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mc
 import webcolors
 import os
+import glob
 
 NUM_CLUSTERS = 5
 
@@ -85,8 +86,9 @@ def getDominantColor(img, filename):
         colorName = get_closest_color(rgb)
         img.save('output/'+colorName+'/'+filename, 'PNG')
         return(filename + ' is '+colorName)
-    except:
-        print(filename + ' was broken')
+    except Exception as e:
+        # print(filename + ' was broken')
+        print('Error:', e)
 
 def verify_dirs():
     # Verify and correct file structure
@@ -97,6 +99,20 @@ def verify_dirs():
         os.makedirs('output')
 
     for color in colorFolders:
-        if not os.path.exists('output/' + color):
-            os.makedirs(os.makedirs('output/' + color))
+        if not os.path.exists('output/' + str(color)):
+            os.makedirs('output/' + str(color))
     return None
+
+def sort_colors():
+    path, dirs, files = next(os.walk('input/'))
+    file_count = len(files)
+    count = 1
+    for filename in glob.glob('input/*'):
+        try:
+            im = Image.open(filename)
+            temp = getDominantColor(im, str(filename[6:]))
+            # print('('+str(count)+'/'+str(file_count)+') , '+temp)
+            count = count+1
+        except Exception as e:
+            # print(str(filename) + ' is not an image')
+            print('Error: ', e, filename)

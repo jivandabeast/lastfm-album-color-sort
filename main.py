@@ -4,8 +4,7 @@ import re
 import shutil
 import time
 import math
-from process import getDominantColor
-from process import verify_dirs
+import process
 import config
 
 def clean_string(string):
@@ -165,10 +164,6 @@ def download_covers(coverURL):
         count += 1
     return None
 
-def sort_colors():
-    # Define the loop for iterating and sorting the images
-    return None
-
 # This is the main functionality of the script
 
 # Set up global variables
@@ -176,7 +171,7 @@ pageCount = math.ceil(float(config.count) / 50)
 urlList = []
 
 # Verify that the file structure is accurate
-verify_dirs()
+process.verify_dirs()
 
 # Populate the urlList with the amount of urls specified in the config file
 i=0
@@ -187,7 +182,7 @@ while i < pageCount:
 print(len(urlList))
 
 # Download all the covers from the urlList
-# download_covers(urlList)
+download_covers(urlList)
 
 # Sort the colors
-# sort_colors
+print(process.sort_colors())
